@@ -169,7 +169,24 @@ class DigitClassificationModel(object):
     def __init__(self):
         # Initialize your model parameters here
         "*** YOUR CODE HERE ***"
+        self.dim0 = 784 # Cannot change.
+        # Can easily modify dim1 by changing divisor. Four and two seem to work fine.
+        self.dim1 = 392
+        self.dim2 = 392
+        self.final_dim = 10
 
+        self.w0 = nn.Parameter(self.dim0, self.dim1) 
+        self.b0 = nn.Parameter(1, self.dim1)
+        self.w1 = nn.Parameter(self.dim1, self.dim2)
+        self.b1 = nn.Parameter(1, self.dim2) #nn.Parameter(1,1)
+        self.w2 = nn.Parameter(self.dim2, self.final_dim)
+        self.b2 = nn.Parameter(1,self.final_dim)
+
+        self.network = [self.w0, self.b0, self.w1, self.b1, self.w2, self.b2]
+
+        self.learning_rate = 0.5
+        self.batch_size = 100
+        
     def run(self, x):
         """
         Runs the model for a batch of examples.
@@ -185,6 +202,23 @@ class DigitClassificationModel(object):
                 (also called logits)
         """
         "*** YOUR CODE HERE ***"
+        y0 = nn.Linear(x, self.w0)              # Input is (batch_size x 784) and (784, self.dim1). Output is (batch_size, self.dim1).
+        
+        # The input to AddBias is (batch_size x num_features) and (1 x num_features), where num_features = self.dim1.
+        # The output is (batch_size x num_features), where num_features = self.dim1. 
+        y1 = nn.ReLU(nn.AddBias(y0, self.b0))  
+
+        # Then, the input to Linear is (batch_size x input_features) and (input_features x output_features), 
+        # meaning output is (batch_size x, output_features). In this case, the output will be (batch_size x self.dim2).
+        y2 = nn.Linear(y1, self.w1)                
+
+        # Input to add bias is (batch_size x self.dim2) and (1 x self.dim2). Output is (batch_size x self.dim2).
+        y3 = nn.ReLU(nn.AddBias(y2, self.b1)) 
+
+        # Input to linear is (batch_size x self.dim2) and (self.dim2 x 10). Output is (batch_size x 10).
+        y4 = nn.Linear(y3, self.w2)
+        y5 = nn.AddBias(y4, self.b2)
+        return y5        
 
     def get_loss(self, x, y):
         """
@@ -200,12 +234,35 @@ class DigitClassificationModel(object):
         Returns: a loss node
         """
         "*** YOUR CODE HERE ***"
+        return nn.SoftmaxLoss(self.run(x), y)
 
     def train(self, dataset):
         """
         Trains the model.
         """
         "*** YOUR CODE HERE ***"
+        accuracy = 0.0
+        epoch = 0
+        while True:
+            for x, y in dataset.iterate_once(self.batch_size):
+                # Apparently we're supposed to pass 'x' here and call run from self.get_loss()...
+                loss = self.get_loss(x, y)
+
+                # Get the gradients.
+                gradients = nn.gradients(loss, [self.w0, self.b0, self.w1, self.b1, self.w2, self.b2])
+
+                self.w0.update(gradients[0], -self.learning_rate)
+                self.b0.update(gradients[1], -self.learning_rate)
+                self.w1.update(gradients[2], -self.learning_rate)
+                self.b1.update(gradients[3], -self.learning_rate)
+                self.w2.update(gradients[4], -self.learning_rate)
+                self.b2.update(gradients[5], -self.learning_rate)
+            
+            accuracy = dataset.get_validation_accuracy()
+            print("Accuracy = %f" % accuracy)
+            # Make sure it gets below 0.02 by checking for 0.01. In testing though, this gets several orders of magnitude lower than 0.01.
+            if accuracy >= 0.97:
+                return        
 
 class LanguageIDModel(object):
     """
