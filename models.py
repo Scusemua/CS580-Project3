@@ -78,16 +78,21 @@ class RegressionModel(object):
     def __init__(self):
         # Initialize your model parameters here
         "*** YOUR CODE HERE ***"
-        self.dim0 = 50
+        self.dim0 = 100
+        # Can easily modify dim1 by changing divisor. Four and two seem to work fine.
+        self.dim1 = int(self.dim0 / 4)
 
         self.w0 = nn.Parameter(1,self.dim0) 
         self.b0 = nn.Parameter(1,self.dim0)
-        self.w1 = nn.Parameter(self.dim0,1)
-        self.b1 = nn.Parameter(1,1)
+        self.w1 = nn.Parameter(self.dim0, self.dim1)
+        self.b1 = nn.Parameter(1, self.dim1) #nn.Parameter(1,1)
+        self.w2 = nn.Parameter(self.dim1, 1)
+        self.b2 = nn.Parameter(1,1)
 
-        self.learning_rate = 0.001
-        self.batch_size = 1
+        self.network = [self.w0, self.b0, self.w1, self.b1, self.w2, self.b2]
 
+        self.learning_rate = 0.05
+        self.batch_size = 50
     def run(self, x):
         """
         Runs the model for a batch of examples.
@@ -98,11 +103,14 @@ class RegressionModel(object):
             A node with shape (batch_size x 1) containing predicted y-values
         """
         "*** YOUR CODE HERE ***"
-        y0 = nn.Linear(x, self.w0)
-        y1 = nn.ReLU(nn.AddBias(y0, self.b0))
-        y2 = nn.Linear(y1, self.w1)
-        #y3 = nn.AddBias(y2, self.b1)
-        return y2
+        # Input is (batch_size x input_features) and (input_features x output_features).
+        y0 = nn.Linear(x, self.w0)              # Output is (batch_size x input_features).
+        y1 = nn.ReLU(nn.AddBias(y0, self.b0))   # Output is (batch_size x num_features).
+        y2 = nn.Linear(y1, self.w1)             # Output is (batch_size x input_features).    
+        y3 = nn.ReLU(nn.AddBias(y2, self.b1))   # Output is (batch_size x num_features).
+        y4 = nn.Linear(y3, self.w2)
+        y5 = nn.AddBias(y4, self.b2)
+        return y5
 
     def get_loss(self, x, y):
         """
@@ -115,29 +123,32 @@ class RegressionModel(object):
         Returns: a loss node
         """
         "*** YOUR CODE HERE ***"
-        return nn.SquareLoss(x, y)
+        # We are supposed to call self.run(x) here (loss won't update in the GUI otherwise).
+        return nn.SquareLoss(self.run(x), y)
 
     def train(self, dataset):
         """
         Trains the model.
         """
         "*** YOUR CODE HERE ***"
-        iteration = 0
-        max_iterations = 10
+        loss = 9999999
         while True:
             for x, y in dataset.iterate_once(self.batch_size):
-                predicted = self.run(x)
+                # Apparently we're supposed to pass 'x' here and call run from self.get_loss()...
+                loss = self.get_loss(x, y)
 
-                loss = self.get_loss(predicted, y)
+                # Get the gradients.
+                gradients = nn.gradients(loss, [self.w0, self.b0, self.w1, self.b1, self.w2, self.b2])
 
-                grad_w0, grad_w1, grad_b0, grad_b1 = nn.gradients(loss, [self.w0, self.w1, self.b0, self.b1])
-
-                self.w0.update(grad_w0, self.learning_rate)
-                self.w1.update(grad_w1, self.learning_rate)
-                self.b0.update(grad_b0, self.learning_rate)
-                #self.b1.update(grad_b1, self.learning_rate)
+                self.w0.update(gradients[0], -self.learning_rate)
+                self.b0.update(gradients[1], -self.learning_rate)
+                self.w1.update(gradients[2], -self.learning_rate)
+                self.b1.update(gradients[3], -self.learning_rate)
+                self.w2.update(gradients[4], -self.learning_rate)
+                self.b2.update(gradients[5], -self.learning_rate)
             
-            if nn.as_scalar(self.get_loss(nn.Constant(dataset.x), nn.Constant(dataset.y))) < 0.02:
+            # Make sure it gets below 0.02 by checking for 0.01. In testing though, this gets several orders of magnitude lower than 0.01.
+            if nn.as_scalar(loss) < 0.01:
                 return
         
 
